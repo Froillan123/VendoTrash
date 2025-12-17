@@ -6,26 +6,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { User, Mail, Lock, UserPlus, Recycle, Shield } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { API_BASE_URL } from '@/lib/apiConfig';
+import { Shield, UserPlus, Mail, Lock, User, Recycle } from 'lucide-react';
+import { usersAPI } from '@/lib/api';
 import logo from '@/assets/logo.png';
 
-const Register = () => {
-  const [name, setName] = useState('');
+const AdminRegister = () => {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name || !email || !password || !confirmPassword) {
+    if (!username || !email || !password || !confirmPassword) {
       toast({
         title: 'Validation Error',
         description: 'Please fill in all fields',
@@ -54,49 +52,78 @@ const Register = () => {
 
     setIsLoading(true);
     try {
-      const success = await register(name, email, password, isAdmin);
-      if (success) {
+      const response = await usersAPI.createAdmin({
+        username,
+        email,
+        password,
+      });
+
+      if (response.access_token && response.user) {
         toast({
-          title: 'Welcome to VendoTrash!',
-          description: `Your ${isAdmin ? 'admin' : ''} account has been created successfully`,
+          title: 'Admin Created Successfully!',
+          description: `Admin user "${username}" has been created`,
         });
-        // Wait a bit for state to update, then navigate based on role
+        // Clear form
+        setUsername('');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        // Optionally navigate back to admin dashboard
         setTimeout(() => {
-          const token = localStorage.getItem('auth_token');
-          if (token) {
-            try {
-              fetch(`${API_BASE_URL}/api/users/me`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-              })
-                .then(res => res.json())
-                .then(user => {
-                  navigate(user.role === 'admin' ? '/admin' : '/dashboard');
-                })
-                .catch(() => navigate('/dashboard'));
-            } catch {
-              navigate('/dashboard');
-            }
-          } else {
-            navigate('/dashboard');
-          }
-        }, 200);
-      } else {
-        toast({
-          title: 'Registration Failed',
-          description: 'Unable to create account. Please try again.',
-          variant: 'destructive',
-        });
+          navigate('/admin/users');
+        }, 1500);
       }
     } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to create admin user';
       toast({
         title: 'Registration Failed',
-        description: error.message || 'Unable to create account. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Check if user is admin - if not, show message
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Shield className="h-5 w-5" />
+                Access Denied
+              </CardTitle>
+              <CardDescription>
+                Only existing admins can create new admin users
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  You must be logged in as an admin to access this page.
+                </p>
+                <div className="flex gap-2">
+                  <Link to="/admin/login" className="flex-1">
+                    <Button variant="default" className="w-full">
+                      Go to Admin Login
+                    </Button>
+                  </Link>
+                  <Link to="/login" className="flex-1">
+                    <Button variant="outline" className="w-full">
+                      User Login
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -113,10 +140,10 @@ const Register = () => {
             <div className="flex justify-center mb-4">
               <img src={logo} alt="VendoTrash" className="h-20 w-auto" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Join VendoTrash</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-2">Create Admin Account</h1>
             <p className="text-muted-foreground flex items-center justify-center gap-2">
-              <Recycle className="h-4 w-4 text-primary" />
-              Start earning rewards for recycling
+              <Shield className="h-4 w-4 text-primary" />
+              Register a new administrator
             </p>
           </div>
 
@@ -125,26 +152,27 @@ const Register = () => {
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-xl flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-primary" />
-                Create Account
+                Admin Registration
               </CardTitle>
               <CardDescription>
-                Fill in your details to get started
+                Fill in the details to create a new admin account
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="flex items-center gap-2">
+                  <Label htmlFor="username" className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    Full Name
+                    Username
                   </Label>
                   <Input
-                    id="name"
+                    id="username"
                     type="text"
-                    placeholder="Juan Dela Cruz"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    placeholder="admin_username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="h-11"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -155,10 +183,11 @@ const Register = () => {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="your@email.com"
+                    placeholder="admin@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-11"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -173,6 +202,8 @@ const Register = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11"
+                    required
+                    minLength={6}
                   />
                 </div>
                 <div className="space-y-2">
@@ -187,25 +218,10 @@ const Register = () => {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="h-11"
+                    required
+                    minLength={6}
                   />
                 </div>
-                
-                {/* Admin Account Option */}
-                <div className="flex items-center space-x-2 p-3 rounded-lg bg-secondary/50 border border-border/50">
-                  <Checkbox
-                    id="isAdmin"
-                    checked={isAdmin}
-                    onCheckedChange={(checked) => setIsAdmin(checked === true)}
-                  />
-                  <Label
-                    htmlFor="isAdmin"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2 cursor-pointer"
-                  >
-                    <Shield className="h-4 w-4 text-primary" />
-                    Create as Admin Account
-                  </Label>
-                </div>
-                
                 <Button 
                   type="submit" 
                   className="w-full h-11" 
@@ -220,7 +236,7 @@ const Register = () => {
                   ) : (
                     <>
                       <UserPlus className="h-4 w-4" />
-                      Register
+                      Create Admin
                     </>
                   )}
                 </Button>
@@ -228,11 +244,16 @@ const Register = () => {
 
               <div className="mt-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  Already have an account?{' '}
-                  <Link to="/login" className="text-primary hover:underline font-medium">
+                  Already have an admin account?{' '}
+                  <Link to="/admin/login" className="text-primary hover:underline font-medium">
                     Login here
                   </Link>
                 </p>
+                <Link to="/admin">
+                  <Button variant="ghost" size="sm" className="mt-2 text-muted-foreground">
+                    ← Back to Admin Dashboard
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>
@@ -242,4 +263,5 @@ const Register = () => {
   );
 };
 
-export default Register;
+export default AdminRegister;
+

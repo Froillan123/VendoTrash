@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, LogIn, Mail, Lock } from 'lucide-react';
+import { Shield, LogIn, Mail, Lock, UserPlus } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 const AdminLogin = () => {
@@ -131,6 +131,12 @@ const AdminLogin = () => {
               </form>
 
               <div className="mt-6 text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  Don't have an admin account?{' '}
+                  <Link to="/admin/register" className="text-primary hover:underline font-medium">
+                    Create Admin Account
+                  </Link>
+                </p>
                 <Link to="/login">
                   <Button variant="ghost" size="sm" className="text-muted-foreground">
                     ← Back to User Login

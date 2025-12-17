@@ -1,72 +1,173 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { User, currentUser, mockUsers } from '@/lib/mockData';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { authAPI, usersAPI, User as APIUser, setAuthToken, removeAuthToken } from '@/lib/api';
+
+// Map API User to Client User format
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  totalPoints: number;
+  totalPlastic: number;
+  totalMetal: number;
+  totalTransactions: number;
+  status: 'Active' | 'Inactive';
+  createdAt: string;
+}
 
 interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string, asAdmin?: boolean) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string, isAdmin?: boolean) => Promise<boolean>;
   logout: () => void;
   updateUserPoints: (points: number) => void;
   updateUserStats: (trashType: 'PLASTIC' | 'METAL') => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper to convert API User to Client User
+const mapAPIUserToClient = (apiUser: APIUser): User => {
+  return {
+    id: String(apiUser.id),
+    name: apiUser.username,
+    email: apiUser.email,
+    totalPoints: apiUser.total_points,
+    totalPlastic: apiUser.total_plastic,
+    totalMetal: apiUser.total_metal,
+    totalTransactions: apiUser.total_transactions,
+    status: apiUser.is_active ? 'Active' : 'Inactive',
+    createdAt: apiUser.created_at.split('T')[0],
+  };
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const login = useCallback(async (email: string, password: string, asAdmin = false): Promise<boolean> => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
+  // Helper to decode JWT token and get user ID
+  const getUserIdFromToken = (token: string): number | null => {
+    try {
+      // JWT token format: header.payload.signature
+      const payload = token.split('.')[1];
+      const decoded = JSON.parse(atob(payload));
+      return decoded.sub || null; // 'sub' is the user ID in JWT
+    } catch {
+      return null;
+    }
+  };
+
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const loadUser = async () => {
+      const token = localStorage.getItem('auth_token');
+      
+      if (token && !token.startsWith('temp_')) {
+        try {
+          // Try to get current user using /me endpoint
+          const apiUser = await usersAPI.getMe();
+          setUser(mapAPIUserToClient(apiUser));
+          setIsAdmin(apiUser.role === 'admin');
+        } catch (error) {
+          // Token invalid or expired, clear storage
+          removeAuthToken();
+        }
+      }
+    };
     
-    if (asAdmin) {
-      if (email === 'admin@vendotrash.com' && password === 'admin123') {
-        setIsAdmin(true);
-        setUser({ ...currentUser, name: 'Admin User', email: 'admin@vendotrash.com' });
+    loadUser();
+  }, []);
+
+  const login = useCallback(async (email: string, password: string, asAdmin = false): Promise<boolean> => {
+    try {
+      const response = await authAPI.login({ email, password });
+    
+      if (response.user) {
+      const clientUser = mapAPIUserToClient(response.user);
+      setUser(clientUser);
+      setIsAdmin(response.user?.role === 'admin' || false);
+      
+      // Store JWT token from login response
+      if (response.access_token) {
+        setAuthToken(response.access_token);
+      }
+        
+      return true;
+    }
+    return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
+  }, []);
+
+  const register = useCallback(async (name: string, email: string, password: string, isAdminAccount = false): Promise<boolean> => {
+    try {
+      let response;
+      
+      if (isAdminAccount) {
+        // Use admin registration endpoint
+        response = await usersAPI.createAdmin({
+          username: name,
+          email,
+          password,
+        });
+      } else {
+        // Use regular registration endpoint
+        response = await authAPI.register({
+          username: name,
+          email,
+          password,
+        });
+      }
+      
+      // Registration now returns token and user (auto-login)
+      if (response.access_token && response.user) {
+        const clientUser = mapAPIUserToClient(response.user);
+        setUser(clientUser);
+        setIsAdmin(response.user.role === 'admin' || false);
+        
+        // Store JWT token for auto-login - MUST be synchronous
+        setAuthToken(response.access_token);
+        
         return true;
       }
       return false;
+    } catch (error) {
+      console.error('Register error:', error);
+      throw error; // Re-throw to be caught by UI
     }
-    
-    const foundUser = mockUsers.find(u => u.email === email);
-    if (foundUser || (email && password)) {
-      setUser(foundUser || { ...currentUser, email });
-      setIsAdmin(false);
-      return true;
-    }
-    return false;
   }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string): Promise<boolean> => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    if (name && email && password) {
-      const newUser: User = {
-        id: String(Date.now()),
-        name,
-        email,
-        totalPoints: 0,
-        totalPlastic: 0,
-        totalMetal: 0,
-        totalTransactions: 0,
-        status: 'Active',
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setUser(newUser);
+  const logout = useCallback(async () => {
+    try {
+      // Call server-side logout endpoint
+      await authAPI.logout();
+    } catch (error) {
+      // Even if server logout fails, continue with client-side logout
+      console.error('Logout error:', error);
+    } finally {
+      // Always clear client-side state
+      setUser(null);
       setIsAdmin(false);
-      return true;
+      removeAuthToken(); // This already removes from localStorage
+      // Clear any cached data
+      localStorage.removeItem('auth_token');
     }
-    return false;
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    setIsAdmin(false);
-  }, []);
+  const refreshUser = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const apiUser = await usersAPI.getById(Number(user.id));
+      setUser(mapAPIUserToClient(apiUser));
+    } catch (error) {
+      console.error('Refresh user error:', error);
+    }
+  }, [user]);
 
   const updateUserPoints = useCallback((points: number) => {
     setUser(prev => prev ? { ...prev, totalPoints: prev.totalPoints + points } : null);
@@ -84,7 +185,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalTransactions: prev.totalTransactions + 1,
       };
     });
-  }, []);
+    
+    // Refresh from server after a short delay
+    setTimeout(() => {
+      refreshUser();
+    }, 1000);
+  }, [refreshUser]);
 
   return (
     <AuthContext.Provider value={{
@@ -96,6 +202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logout,
       updateUserPoints,
       updateUserStats,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

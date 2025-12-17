@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
@@ -15,13 +15,41 @@ import {
   CheckCircle,
   Clock
 } from 'lucide-react';
-import { mockRewards, mockRedemptions, Redemption } from '@/lib/mockData';
+import { rewardsAPI, redemptionsAPI, Reward, Redemption } from '@/lib/api';
 
 const Redeem = () => {
-  const { user, updateUserPoints } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { toast } = useToast();
-  const [redemptions, setRedemptions] = useState<Redemption[]>(mockRedemptions);
-  const [isRedeeming, setIsRedeeming] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
+  const [isRedeeming, setIsRedeeming] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const [rewardsData, redemptionsResponse] = await Promise.all([
+        rewardsAPI.getAll(true), // Only active rewards
+        redemptionsAPI.getByUser(0, 100)
+      ]);
+      setRewards(rewardsData);
+      // Handle paginated response - extract items if it's a paginated response
+      const redemptionsArray = Array.isArray(redemptionsResponse) 
+        ? redemptionsResponse 
+        : redemptionsResponse.items;
+      setRedemptions(redemptionsArray);
+    } catch (error) {
+      console.error('Error loading redeem data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getRewardIcon = (category: string) => {
     switch (category) {
@@ -32,7 +60,7 @@ const Redeem = () => {
     }
   };
 
-  const handleRedeem = async (rewardId: string, rewardName: string, pointsRequired: number) => {
+  const handleRedeem = async (rewardId: number, rewardName: string, pointsRequired: number) => {
     if ((user?.totalPoints || 0) < pointsRequired) {
       toast({
         title: 'Insufficient Points',
@@ -44,29 +72,30 @@ const Redeem = () => {
 
     setIsRedeeming(rewardId);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Deduct points
-    updateUserPoints(-pointsRequired);
-
-    // Add redemption record
-    const newRedemption: Redemption = {
-      id: `r${Date.now()}`,
-      userId: user?.id || '1',
-      rewardName,
-      pointsUsed: pointsRequired,
-      timestamp: new Date().toISOString(),
-      status: 'Completed',
-    };
-    setRedemptions(prev => [newRedemption, ...prev]);
-
-    setIsRedeeming(null);
-    
-    toast({
-      title: 'Redemption Successful!',
-      description: `You have redeemed ${rewardName}`,
-    });
+    try {
+      // Create redemption via API
+      const newRedemption = await redemptionsAPI.create({
+        reward_id: rewardId,
+        points_used: pointsRequired,
+      });
+      
+      // Reload data
+      await loadData();
+      await refreshUser();
+      
+      toast({
+        title: 'Redemption Successful!',
+        description: `You have redeemed ${rewardName}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Redemption Failed',
+        description: error.message || 'Failed to redeem reward',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRedeeming(null);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -83,27 +112,27 @@ const Redeem = () => {
       
       <main className="flex-1 content-container">
         {/* Page Header */}
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-3">
-            <Gift className="h-8 w-8 text-primary" />
+        <div className="mb-6 sm:mb-8 lg:mb-10 animate-fade-in">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2 flex items-center gap-2 sm:gap-3">
+            <Gift className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             Redeem Points
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Exchange your points for exciting rewards
           </p>
         </div>
 
         {/* Current Balance */}
-        <Card className="mb-8 animate-slide-up">
-          <CardContent className="p-6">
+        <Card className="mb-6 sm:mb-8 animate-slide-up">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-primary/10">
-                  <Coins className="h-6 w-6 text-primary" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-3 rounded-xl bg-primary/10 flex-shrink-0">
+                  <Coins className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Available Points</p>
-                  <p className="text-3xl font-bold text-foreground">{user?.totalPoints || 0}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Available Points</p>
+                  <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">{user?.totalPoints || 0}</p>
                 </div>
               </div>
             </div>
@@ -111,13 +140,18 @@ const Redeem = () => {
         </Card>
 
         {/* Rewards Grid */}
-        <div className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-4">Available Rewards</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mockRewards.map((reward, index) => {
-              const Icon = getRewardIcon(reward.category);
-              const canAfford = (user?.totalPoints || 0) >= reward.pointsRequired;
-              const isCurrentlyRedeeming = isRedeeming === reward.id;
+        <div className="mb-8 sm:mb-10">
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-foreground mb-3 sm:mb-4">Available Rewards</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-5">
+            {isLoading ? (
+              <p className="col-span-full text-center text-muted-foreground py-8">Loading rewards...</p>
+            ) : rewards.length === 0 ? (
+              <p className="col-span-full text-center text-muted-foreground py-8">No rewards available</p>
+            ) : (
+              rewards.map((reward, index) => {
+                const Icon = getRewardIcon(reward.category);
+                const canAfford = (user?.totalPoints || 0) >= reward.points_required;
+                const isCurrentlyRedeeming = isRedeeming === reward.id;
 
               return (
                 <Card 
@@ -128,15 +162,15 @@ const Redeem = () => {
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className={`p-3 rounded-xl ${
+                    <div className="flex items-start justify-between gap-2">
+                      <div className={`p-2 sm:p-3 rounded-xl flex-shrink-0 ${
                         reward.category === 'wifi' 
                           ? 'bg-blue-500/10' 
                           : reward.category === 'data' 
                             ? 'bg-purple-500/10' 
                             : 'bg-orange-500/10'
                       }`}>
-                        <Icon className={`h-6 w-6 ${
+                        <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${
                           reward.category === 'wifi' 
                             ? 'text-blue-500' 
                             : reward.category === 'data' 
@@ -144,21 +178,21 @@ const Redeem = () => {
                               : 'text-orange-500'
                         }`} />
                       </div>
-                      <Badge variant="secondary" className="font-semibold">
-                        {reward.pointsRequired} pts
+                      <Badge variant="secondary" className="font-semibold text-xs sm:text-sm flex-shrink-0">
+                        {reward.points_required} pts
                       </Badge>
                     </div>
-                    <CardTitle className="text-lg mt-3">{reward.name}</CardTitle>
-                    <CardDescription className="text-sm">
-                      {reward.description}
+                    <CardTitle className="text-base sm:text-lg mt-2 sm:mt-3">{reward.name}</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm line-clamp-2">
+                      {reward.description || 'No description available'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <Button
-                      onClick={() => handleRedeem(reward.id, reward.name, reward.pointsRequired)}
-                      disabled={!canAfford || isCurrentlyRedeeming}
+                      onClick={() => handleRedeem(reward.id, reward.name, reward.points_required)}
+                      disabled={!canAfford || isCurrentlyRedeeming || !reward.is_active}
                       variant={canAfford ? 'eco' : 'secondary'}
-                      className="w-full"
+                      className="w-full h-10 sm:h-11 text-sm sm:text-base"
                     >
                       {isCurrentlyRedeeming ? (
                         <span className="flex items-center gap-2">
@@ -177,7 +211,7 @@ const Redeem = () => {
                   </CardContent>
                 </Card>
               );
-            })}
+            }))}
           </div>
         </div>
 
@@ -198,23 +232,23 @@ const Redeem = () => {
                 No redemptions yet. Start redeeming your points!
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {redemptions.map((redemption, index) => (
                   <div 
                     key={redemption.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                    className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                        <CheckCircle className="h-4 w-4 text-primary" />
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 flex-shrink-0">
+                        <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{redemption.rewardName}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(redemption.timestamp)}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm sm:text-base font-medium text-foreground truncate">{redemption.reward?.name || 'Reward'}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(redemption.created_at)}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-orange-600">-{redemption.pointsUsed}</p>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <p className="text-sm sm:text-base font-semibold text-orange-600">-{redemption.points_used}</p>
                       <Badge variant="secondary" className="text-xs">{redemption.status}</Badge>
                     </div>
                   </div>

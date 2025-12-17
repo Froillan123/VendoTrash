@@ -48,43 +48,43 @@ const Navbar = () => {
 
   return (
     <nav className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-soft">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
+        <div className="flex items-center justify-between h-14 sm:h-16">
           {/* Logo */}
-          <Link to={isAdmin ? '/admin' : '/dashboard'} className="flex items-center gap-2">
-            <img src={logo} alt="VendoTrash" className="h-10 w-auto" />
-            <span className="font-bold text-lg text-foreground hidden sm:block">VendoTrash</span>
+          <Link to={isAdmin ? '/admin' : '/dashboard'} className="flex items-center gap-2 flex-shrink-0">
+            <img src={logo} alt="VendoTrash" className="h-8 w-auto sm:h-10" />
+            <span className="font-bold text-base sm:text-lg text-foreground hidden sm:block">VendoTrash</span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-1 lg:gap-2">
             {navItems.map((item) => (
               <Link key={item.path} to={item.path}>
                 <Button
                   variant={isActive(item.path) ? 'secondary' : 'ghost'}
                   size="sm"
-                  className={isActive(item.path) ? 'bg-secondary text-secondary-foreground' : ''}
+                  className={`${isActive(item.path) ? 'bg-secondary text-secondary-foreground' : ''} text-xs sm:text-sm`}
                 >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <item.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="hidden lg:inline">{item.label}</span>
                 </Button>
               </Link>
             ))}
           </div>
 
           {/* User Info & Logout */}
-          <div className="hidden md:flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary">
-              <Leaf className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium text-foreground">
+          <div className="hidden md:flex items-center gap-2 lg:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-secondary">
+              <Leaf className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary flex-shrink-0" />
+              <span className="text-xs sm:text-sm font-medium text-foreground whitespace-nowrap">
                 {user?.totalPoints || 0} pts
               </span>
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-xs sm:text-sm text-muted-foreground hidden lg:block truncate max-w-[120px]">
               {user?.name}
               {isAdmin && <span className="ml-1 text-primary">(Admin)</span>}
             </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="flex-shrink-0">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>

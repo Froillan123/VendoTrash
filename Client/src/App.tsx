@@ -9,7 +9,6 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import Wallet from "./pages/Wallet";
 import Redeem from "./pages/Redeem";
@@ -54,7 +53,6 @@ const AppRoutes = () => {
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-      <Route path="/admin/login" element={<PublicRoute><AdminLogin /></PublicRoute>} />
 
       {/* User Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

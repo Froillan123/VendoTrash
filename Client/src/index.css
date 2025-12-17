@@ -157,7 +157,18 @@
   }
 
   .content-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16 py-6 sm:py-8 lg:py-10;
+    max-width: 1920px; /* Allow full width on very large screens */
+  }
+  
+  /* Better responsive spacing */
+  .responsive-grid {
+    @apply grid gap-4 sm:gap-5 lg:gap-6;
+  }
+  
+  /* Improved card spacing */
+  .card-spacing {
+    @apply p-4 sm:p-5 lg:p-6;
   }
 }
 

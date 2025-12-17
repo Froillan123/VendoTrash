@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Leaf, LogIn, Mail, Lock, Recycle } from 'lucide-react';
+import { API_BASE_URL } from '@/lib/apiConfig';
 import logo from '@/assets/logo.png';
 
 const Login = () => {
@@ -30,21 +31,44 @@ const Login = () => {
     }
 
     setIsLoading(true);
-    const success = await login(email, password);
-    setIsLoading(false);
-
-    if (success) {
-      toast({
-        title: 'Welcome back!',
-        description: 'Successfully logged in to VendoTrash',
-      });
-      navigate('/dashboard');
-    } else {
+    try {
+      const success = await login(email, password);
+      if (success) {
+        toast({
+          title: 'Welcome back!',
+          description: 'Successfully logged in to VendoTrash',
+        });
+        // Wait for state to update, then navigate
+        setTimeout(() => {
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            fetch(`${API_BASE_URL}/api/users/me`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+              .then(res => res.json())
+              .then(user => {
+                navigate(user.role === 'admin' ? '/admin' : '/dashboard');
+              })
+              .catch(() => navigate('/dashboard'));
+          } else {
+            navigate('/dashboard');
+          }
+        }, 200);
+      } else {
+        toast({
+          title: 'Login Failed',
+          description: 'Invalid email or password',
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
       toast({
         title: 'Login Failed',
-        description: 'Invalid email or password',
+        description: error.message || 'Invalid email or password',
         variant: 'destructive',
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -75,10 +99,10 @@ const Login = () => {
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-xl flex items-center gap-2">
                 <LogIn className="h-5 w-5 text-primary" />
-                User Login
+                Login
               </CardTitle>
               <CardDescription>
-                Enter your credentials to access your account
+                Enter your credentials to access your account (Admin or Customer)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -138,15 +162,6 @@ const Login = () => {
                     Register here
                   </Link>
                 </p>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-border">
-                <Link to="/admin/login">
-                  <Button variant="ghost" size="sm" className="w-full text-muted-foreground">
-                    <Leaf className="h-4 w-4 mr-2" />
-                    Admin Login
-                  </Button>
-                </Link>
               </div>
             </CardContent>
           </Card>
