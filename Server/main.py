@@ -46,16 +46,20 @@ app = FastAPI(
 )
 
 # CORS Middleware
+# For local development: Allow all origins (ESP32-CAM needs this)
+# For production: Restrict to specific domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5175",
-        "http://localhost:5173",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:5173",
-        # Add your Vercel domain here when deployed
-        # "https://your-app.vercel.app"
-    ],
+    allow_origins=["*"],  # Allow all origins for ESP32-CAM local network access
+    # For production, replace with specific origins:
+    # allow_origins=[
+    #     "http://localhost:5175",
+    #     "http://localhost:5173",
+    #     "http://127.0.0.1:5175",
+    #     "http://127.0.0.1:5173",
+    #     "https://your-app.vercel.app",
+    #     # Add Cloud Run URL when deployed
+    # ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

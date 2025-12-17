@@ -183,3 +183,18 @@ class VendoCommandResponse(BaseModel):
     message: str
     material: Optional[str] = None
 
+
+class VendoClassifyRequest(BaseModel):
+    """Request schema for trash classification"""
+    image_base64: str  # Base64 encoded JPEG image
+    machine_id: int = 1  # Default machine
+
+
+class VendoClassifyResponse(BaseModel):
+    """Response schema for trash classification"""
+    status: str
+    material_type: str  # PLASTIC or NON_PLASTIC
+    confidence: float
+    points_earned: int
+    transaction_id: Optional[str] = None  # UUID as string
+

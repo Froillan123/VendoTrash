@@ -1,0 +1,53 @@
+========================================
+ESP32-CAM Configuration Values
+========================================
+
+✅ SERVER IS RUNNING!
+✅ JWT TOKEN READY!
+✅ SERVER IP: 192.168.1.2
+
+========================================
+1. SERVER URL (Already Set Correctly)
+========================================
+http://192.168.1.2:8000/api/vendo/classify
+
+========================================
+2. JWT TOKEN (Copy This!)
+========================================
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZXhwIjoxNzY4NTg3ODA5fQ.OTaNzQ9BB5h9xKh55uRP4NxUYa7dISbf43tAtbyEDvw
+
+========================================
+3. WIFI CREDENTIALS (You Need to Fill)
+========================================
+SSID: _____________________________
+Password: _________________________
+
+========================================
+HOW TO UPDATE ESP32 CODE:
+========================================
+
+Open: Arduino/esp32_cam/esp32_cam.ino
+
+Update these lines:
+
+Line 18-19:
+const char* ssid = "YOUR_WIFI_NAME";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+Line 24 (Already correct):
+const char* serverUrl = "http://192.168.1.2:8000/api/vendo/classify";
+
+Line 29:
+const char* authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZXhwIjoxNzY4NTg3ODA5fQ.OTaNzQ9BB5h9xKh55uRP4NxUYa7dISbf43tAtbyEDvw";
+
+========================================
+NEXT STEPS:
+========================================
+1. Update WiFi credentials in ESP32 code
+2. Upload code to ESP32-CAM
+3. Open Serial Monitor (115200 baud)
+4. Look for "✅ Server is reachable!"
+
+========================================
+
+

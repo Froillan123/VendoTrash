@@ -36,6 +36,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 pydantic_core==2.14.1
 PyJWT==2.8.0
+pyserial==3.5
 python-dotenv==1.0.0
 python-jose==3.3.0
 PyYAML==6.0.3
