@@ -1,3 +1,4 @@
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +12,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Wallet from "./pages/Wallet";
+import Transactions from "./pages/Transactions";
 import Redeem from "./pages/Redeem";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
@@ -20,32 +22,45 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Protected Route Component
+// Protected Route Component (must be inside AuthProvider)
 const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
-  const { isAuthenticated, isAdmin } = useAuth();
+  try {
+    const { isAuthenticated, isAdmin } = useAuth();
 
-  if (!isAuthenticated) {
+    if (!isAuthenticated) {
+      return <Navigate to="/login" replace />;
+    }
+
+    if (adminOnly && !isAdmin) {
+      return <Navigate to="/dashboard" replace />;
+    }
+
+    return <>{children}</>;
+  } catch (error) {
+    // Fallback if AuthProvider is not ready
+    console.error("AuthProvider not ready:", error);
     return <Navigate to="/login" replace />;
   }
-
-  if (adminOnly && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
 };
 
-// Public Route (redirects if authenticated)
+// Public Route (redirects if authenticated) - must be inside AuthProvider
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, isAdmin } = useAuth();
+  try {
+    const { isAuthenticated, isAdmin } = useAuth();
 
-  if (isAuthenticated) {
-    return <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />;
+    if (isAuthenticated) {
+      return <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />;
+    }
+
+    return <>{children}</>;
+  } catch (error) {
+    // If AuthProvider not ready, show public content
+    console.error("AuthProvider not ready:", error);
+    return <>{children}</>;
   }
-
-  return <>{children}</>;
 };
 
+// AppRoutes component - must be inside AuthProvider
 const AppRoutes = () => {
   return (
     <Routes>
@@ -57,6 +72,7 @@ const AppRoutes = () => {
       {/* User Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
+      <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
       <Route path="/redeem" element={<ProtectedRoute><Redeem /></ProtectedRoute>} />
 
       {/* Admin Protected Routes */}

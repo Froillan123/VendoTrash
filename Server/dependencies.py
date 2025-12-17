@@ -98,3 +98,15 @@ def get_admin_user(
         )
     return current_user
 
+
+def get_customer_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Dependency to ensure current user is a customer (not admin)"""
+    if current_user.role != "customer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer access required. Admin users cannot perform this action."
+        )
+    return current_user
+

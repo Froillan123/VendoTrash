@@ -18,7 +18,13 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
     # Startup
     logger.info("Starting up VendoTrash application...")
+    
+    # Test database connection
     test_connection()
+    
+    # Test Redis connection
+    from config import test_redis_connection
+    test_redis_connection()
     
     # Create database tables
     logger.info("Creating database tables...")

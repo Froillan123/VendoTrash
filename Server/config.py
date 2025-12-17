@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ESP32_IP: str = "192.168.1.100"
     ESP32_PORT: int = 80
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None  # Can be JSON string or file path
+    REDIS_URL: Optional[str] = None  # Redis connection URL
     
     class Config:
         env_file = ".env"
@@ -25,6 +26,85 @@ class Settings(BaseSettings):
 
 # Create settings instance
 settings = Settings()
+
+# Redis client (initialized lazily)
+_redis_client = None
+
+def get_redis_client():
+    """Get or create Redis client instance with retry logic"""
+    global _redis_client
+    if settings.REDIS_URL:
+        # If client exists but connection is closed, reset it
+        if _redis_client is not None:
+            try:
+                _redis_client.ping()
+                return _redis_client
+            except Exception:
+                # Connection lost, reset client
+                logger.warning("Redis connection lost, reconnecting...")
+                _redis_client = None
+        
+        # Create new client
+        if _redis_client is None:
+            try:
+                import redis
+                # Parse Redis URL (supports both redis:// and rediss://)
+                # Add connection pool settings for better reliability
+                _redis_client = redis.from_url(
+                    settings.REDIS_URL,
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    retry_on_timeout=True,
+                    health_check_interval=30
+                )
+                # Test connection
+                _redis_client.ping()
+            except redis.ConnectionError as e:
+                logger.error(f"❌ Redis connection error: {str(e)}")
+                logger.warning("Redis features will be disabled")
+                _redis_client = None
+            except Exception as e:
+                logger.error(f"❌ Failed to connect to Redis: {str(e)}")
+                logger.warning("Redis features will be disabled")
+                _redis_client = None
+    return _redis_client
+
+
+def test_redis_connection():
+    """Test Redis connection at startup (similar to test_connection for database)"""
+    logger.info("Attempting to connect to Redis...")
+    
+    if not settings.REDIS_URL:
+        logger.warning("⚠️  REDIS_URL not set in environment variables")
+        logger.warning("Redis features will be disabled")
+        return False
+    
+    try:
+        # Mask password in URL for logging
+        redis_url_display = settings.REDIS_URL
+        if "@" in redis_url_display:
+            # Hide password: redis://default:password@host:port -> redis://default:***@host:port
+            parts = redis_url_display.split("@")
+            if ":" in parts[0]:
+                protocol_user = parts[0].rsplit(":", 1)[0]
+                redis_url_display = f"{protocol_user}:***@{parts[1]}"
+        
+        logger.info(f"Redis URL: {redis_url_display}")
+        
+        client = get_redis_client()
+        if client:
+            # Test with a simple operation
+            client.ping()
+            logger.info("✅ Redis connection successful!")
+            return True
+        else:
+            logger.error("❌ Redis connection failed")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Redis connection error: {str(e)}")
+        logger.warning("Redis features will be disabled")
+        return False
 
 # Handle Google Cloud credentials
 _google_credentials_file = None

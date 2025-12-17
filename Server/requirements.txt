@@ -40,6 +40,7 @@ pyserial==3.5
 python-dotenv==1.0.0
 python-jose==3.3.0
 PyYAML==6.0.3
+redis==5.0.1
 requests==2.32.5
 rsa==4.9.1
 six==1.17.0

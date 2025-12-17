@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from db import get_db
 from dependencies import get_current_user, get_admin_user
 from models import User
-from schemas import UserCreate, UserResponse, UserCreateResponse, PaginatedResponse
-from controllers.user_controller import create_user, get_user_by_id, get_all_users
+from schemas import UserCreate, UserResponse, UserCreateResponse, PaginatedResponse, AddPointsRequest
+from controllers.user_controller import create_user, get_user_by_id, get_all_users, add_points_to_user
 from utils import create_access_token
 
 router = APIRouter()
@@ -43,10 +43,15 @@ def get_current_user_route(current_user: User = Depends(get_current_user)):
 def get_all_users_route(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=1000),
+    role: str = Query(None, description="Filter by role (e.g., 'customer', 'admin')"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all users (admin only) with pagination"""
+    """Get all users (admin only) with pagination
+    
+    Args:
+        role: Optional filter to show only customers or admins
+    """
     # Only admin can view all users
     if current_user.role != 'admin':
         raise HTTPException(
@@ -54,7 +59,7 @@ def get_all_users_route(
             detail="Admin access required"
         )
     
-    return get_all_users(db, skip, limit)
+    return get_all_users(db, skip, limit, role_filter=role)
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -112,4 +117,24 @@ def create_admin_user_route(
         token_type="bearer",
         user=result
     )
+
+
+@router.post("/{user_id}/add-points", response_model=UserResponse)
+def add_points_route(
+    user_id: int,
+    points_data: AddPointsRequest,
+    current_user: User = Depends(get_admin_user),  # Only admins can add points
+    db: Session = Depends(get_db)
+):
+    """Add points to a customer user (admin only)"""
+    result = add_points_to_user(user_id, points_data.points, db)
+    
+    # Check for errors
+    if isinstance(result, dict) and "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["error"]
+        )
+    
+    return result
 

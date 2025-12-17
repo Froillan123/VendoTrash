@@ -11,7 +11,8 @@ import {
   Leaf,
   Users,
   BarChart3,
-  Cpu
+  Cpu,
+  Receipt
 } from 'lucide-react';
 import { useState } from 'react';
 import logo from '@/assets/logo.png';
@@ -30,6 +31,7 @@ const Navbar = () => {
   const userNavItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/wallet', label: 'Wallet', icon: Wallet },
+    { path: '/transactions', label: 'Transactions', icon: Receipt },
     { path: '/redeem', label: 'Redeem', icon: Gift },
   ];
 

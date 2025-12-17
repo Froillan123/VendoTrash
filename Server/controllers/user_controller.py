@@ -53,10 +53,26 @@ def get_user_by_id(user_id: int, db: Session):
     return UserResponse.model_validate(user)
 
 
-def get_all_users(db: Session, skip: int = 0, limit: int = 100):
-    """Get all users - business logic (admin only)"""
-    users = db.query(User).order_by(User.created_at.desc()).offset(skip).limit(limit).all()
-    total = db.query(func.count(User.id)).scalar()
+def get_all_users(db: Session, skip: int = 0, limit: int = 100, role_filter: str = None):
+    """Get all users - business logic (admin only)
+    
+    Args:
+        role_filter: If provided, filter by role (e.g., 'customer', 'admin')
+    """
+    query = db.query(User)
+    
+    # Filter by role if specified
+    if role_filter:
+        query = query.filter(User.role == role_filter)
+    
+    users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
+    
+    # Count total (with filter if applied)
+    count_query = db.query(func.count(User.id))
+    if role_filter:
+        count_query = count_query.filter(User.role == role_filter)
+    total = count_query.scalar()
+    
     return {
         "items": [UserResponse.model_validate(u) for u in users],
         "total": total,
@@ -64,4 +80,27 @@ def get_all_users(db: Session, skip: int = 0, limit: int = 100):
         "limit": limit,
         "has_more": (skip + limit) < total
     }
+
+
+def add_points_to_user(user_id: int, points: int, db: Session):
+    """Add points to a user - business logic (admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        return {"error": "User not found"}
+    
+    if user.role == "admin":
+        return {"error": "Cannot add points to admin users"}
+    
+    # Add points
+    user.total_points += points
+    
+    # Ensure points don't go negative
+    if user.total_points < 0:
+        user.total_points = 0
+    
+    db.commit()
+    db.refresh(user)
+    
+    return UserResponse.model_validate(user)
 

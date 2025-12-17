@@ -4,6 +4,8 @@ Webcam Service for capturing images from USB webcam
 import cv2
 import base64
 import logging
+import time
+import sys
 from typing import Optional, Tuple
 import io
 from PIL import Image
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class WebcamService:
-    """Service for capturing images from USB webcam"""
+    """Service for capturing images from USB webcam - Event-driven for Arduino bridge"""
     
     def __init__(self, camera_index: int = 0):
         """
@@ -23,19 +25,49 @@ class WebcamService:
         """
         self.camera_index = camera_index
         self.camera = None
+        self._lock_count = 0  # Track how many times camera is opened
+        self._max_retries = 3
     
     def _open_camera(self) -> bool:
-        """Open camera connection"""
+        """Open camera connection with retry logic"""
         try:
-            if self.camera is None:
-                self.camera = cv2.VideoCapture(self.camera_index)
-                if not self.camera.isOpened():
-                    logger.error(f"Failed to open camera at index {self.camera_index}")
-                    return False
-                # Set camera resolution (optional, adjust as needed)
-                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            return True
+            # If camera is already open, check if it's still working
+            if self.camera is not None:
+                if self.camera.isOpened():
+                    return True
+                else:
+                    # Camera was closed externally, reset
+                    self.camera = None
+            
+            # Try to open camera with retries
+            for attempt in range(self._max_retries):
+                try:
+                    # Use DirectShow on Windows for better compatibility
+                    backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
+                    self.camera = cv2.VideoCapture(self.camera_index, backend)
+                    if self.camera.isOpened():
+                        # Set camera resolution
+                        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        # Set buffer size to 1 to get latest frame
+                        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        logger.info(f"Camera opened successfully at index {self.camera_index}")
+                        return True
+                    else:
+                        self.camera.release()
+                        self.camera = None
+                except Exception as e:
+                    logger.warning(f"Camera open attempt {attempt + 1} failed: {str(e)}")
+                    if self.camera:
+                        self.camera.release()
+                        self.camera = None
+                    time.sleep(0.1)  # Small delay before retry
+            
+            logger.error(f"Failed to open camera at index {self.camera_index} after {self._max_retries} attempts")
+            # Try to provide helpful error message
+            if sys.platform == "win32":
+                logger.error("On Windows: Make sure webcam is not used by another app (Camera, Zoom, Teams, etc.)")
+            return False
         except Exception as e:
             logger.error(f"Error opening camera: {str(e)}")
             return False
@@ -49,6 +81,7 @@ class WebcamService:
     def capture_image(self, timeout: int = 3) -> Optional[str]:
         """
         Capture image from webcam and return as base64 string
+        Event-driven: Called when Arduino bridge receives "READY" signal
         
         Args:
             timeout: Maximum number of attempts to capture a valid frame
@@ -58,19 +91,32 @@ class WebcamService:
         """
         try:
             if not self._open_camera():
+                logger.error("Camera not available for capture")
                 return None
             
-            # Try to capture a valid frame (sometimes first frame is black)
+            # Flush buffer to get latest frame (important for event-driven capture)
+            for _ in range(2):
+                self.camera.read()  # Discard old frames
+            
+            # Try to capture a valid frame
             for attempt in range(timeout):
                 ret, frame = self.camera.read()
                 
                 if not ret:
                     logger.warning(f"Failed to read frame (attempt {attempt + 1}/{timeout})")
+                    time.sleep(0.1)
                     continue
                 
                 # Check if frame is not empty
                 if frame is None or frame.size == 0:
                     logger.warning(f"Empty frame captured (attempt {attempt + 1}/{timeout})")
+                    time.sleep(0.1)
+                    continue
+                
+                # Validate frame has content (not all black)
+                if frame.mean() < 5:  # Very dark frame, might be invalid
+                    logger.warning(f"Frame too dark (attempt {attempt + 1}/{timeout})")
+                    time.sleep(0.1)
                     continue
                 
                 # Convert BGR to RGB (OpenCV uses BGR, PIL uses RGB)
@@ -96,10 +142,6 @@ class WebcamService:
         except Exception as e:
             logger.error(f"Error capturing image: {str(e)}")
             return None
-        finally:
-            # Don't close camera to keep it ready for next capture
-            # Only close on service shutdown
-            pass
     
     def capture_and_save(self, filepath: str) -> bool:
         """

@@ -56,6 +56,22 @@ const Wallet = () => {
   
   const remainingBalance = user?.totalPoints || 0;
 
+  // Format time ago helper function (must be defined before use)
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   // Combine transactions and redemptions for activity feed
   const recentActivity = [
     ...transactions.slice(0, 10).map(tx => ({
@@ -71,23 +87,13 @@ const Wallet = () => {
       time: formatTimeAgo(r.created_at),
     }))
   ]
-    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+    .sort((a, b) => {
+      // Sort by date (newest first) - need to parse the time strings
+      const timeA = a.time.includes('ago') ? 0 : new Date(a.time).getTime();
+      const timeB = b.time.includes('ago') ? 0 : new Date(b.time).getTime();
+      return timeB - timeA;
+    })
     .slice(0, 10);
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

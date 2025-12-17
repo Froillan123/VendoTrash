@@ -50,6 +50,11 @@ class UserCreateResponse(BaseModel):
     user: Optional[UserResponse] = None
 
 
+class AddPointsRequest(BaseModel):
+    """Schema for adding points to a user"""
+    points: int
+
+
 # Machine Schemas
 class MachineBase(BaseModel):
     """Base machine schema"""
@@ -186,15 +191,15 @@ class VendoCommandResponse(BaseModel):
 
 class VendoClassifyRequest(BaseModel):
     """Request schema for trash classification"""
-    image_base64: str  # Base64 encoded JPEG image
+    image_base64: Optional[str] = None  # Optional: if provided, uses it; if not, captures from webcam
     machine_id: int = 1  # Default machine
 
 
 class VendoClassifyResponse(BaseModel):
     """Response schema for trash classification"""
-    status: str
-    material_type: str  # PLASTIC or NON_PLASTIC
+    status: str  # success, rejected
+    material_type: str  # PLASTIC, NON_PLASTIC, or REJECTED
     confidence: float
     points_earned: int
-    transaction_id: Optional[str] = None  # UUID as string
+    transaction_id: Optional[str] = None  # UUID as string (None if rejected)
 

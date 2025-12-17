@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { authAPI, usersAPI, User as APIUser, setAuthToken, removeAuthToken } from '@/lib/api';
+import { authAPI, usersAPI, vendoAPI, User as APIUser, setAuthToken, removeAuthToken } from '@/lib/api';
 
 // Map API User to Client User format
 interface User {
@@ -143,6 +143,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     try {
+      // Clear token on server (for Arduino bridge)
+      try {
+        await vendoAPI.clearToken();
+      } catch (error) {
+        // Continue even if token clearing fails
+        console.error('Token cleanup error:', error);
+      }
+      
       // Call server-side logout endpoint
       await authAPI.logout();
     } catch (error) {

@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Users, Search, UserCheck, Loader2, Eye, Shield, Mail, Coins, Calendar, Activity } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Users, Search, UserCheck, Loader2, Eye, Shield, Mail, Coins, Calendar, Activity, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { usersAPI, User } from '@/lib/api';
 import { useState, useEffect } from 'react';
@@ -36,6 +37,10 @@ const AdminUsers = () => {
   const [hasMore, setHasMore] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isAddPointsModalOpen, setIsAddPointsModalOpen] = useState(false);
+  const [pointsToAdd, setPointsToAdd] = useState<string>('10');
+  const [isAddingPoints, setIsAddingPoints] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadUsers(currentPage);
@@ -46,7 +51,8 @@ const AdminUsers = () => {
       setLoading(true);
       setError(null);
       const skip = (page - 1) * ITEMS_PER_PAGE;
-      const response = await usersAPI.getAll(skip, ITEMS_PER_PAGE);
+      // Only show customers, not admins
+      const response = await usersAPI.getAll(skip, ITEMS_PER_PAGE, 'customer');
       setUsers(response.items);
       setTotal(response.total);
       setHasMore(response.has_more);
@@ -123,6 +129,45 @@ const AdminUsers = () => {
     setIsViewModalOpen(true);
   };
 
+  const handleAddPoints = (user: User) => {
+    setSelectedUser(user);
+    setPointsToAdd('10');
+    setIsAddPointsModalOpen(true);
+  };
+
+  const handleSubmitAddPoints = async () => {
+    if (!selectedUser) return;
+    
+    const points = parseInt(pointsToAdd);
+    if (isNaN(points) || points <= 0) {
+      toast({
+        title: 'Invalid Points',
+        description: 'Please enter a valid positive number',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsAddingPoints(true);
+      await usersAPI.addPoints(selectedUser.id, points);
+      toast({
+        title: '✅ Points Added',
+        description: `Added ${points} points to ${selectedUser.username}. New total: ${selectedUser.total_points + points}`,
+      });
+      setIsAddPointsModalOpen(false);
+      loadUsers(currentPage); // Refresh the list
+    } catch (err) {
+      toast({
+        title: '❌ Error',
+        description: err instanceof Error ? err.message : 'Failed to add points',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAddingPoints(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
@@ -159,10 +204,10 @@ const AdminUsers = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserCheck className="h-5 w-5 text-primary" />
-              Registered Users ({total})
+              Customer Users ({total})
             </CardTitle>
             <CardDescription>
-              All users in the system
+              All customer accounts (admin users are hidden)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -227,14 +272,26 @@ const AdminUsers = () => {
                               </Badge>
                             </td>
                             <td className="py-3 sm:py-4 px-3 sm:px-4 text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewUser(user)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleViewUser(user)}
+                                  className="h-8 w-8 p-0"
+                                  title="View Details"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleAddPoints(user)}
+                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                                  title="Add Points"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -402,6 +459,73 @@ const AdminUsers = () => {
                     <p className="text-sm font-medium text-foreground">#{selectedUser.id}</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Points Modal */}
+      <Dialog open={isAddPointsModalOpen} onOpenChange={setIsAddPointsModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="h-5 w-5 text-primary" />
+              Add Points
+            </DialogTitle>
+            <DialogDescription>
+              Add points to {selectedUser?.username} for testing purposes
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedUser && (
+            <div className="space-y-4 mt-4">
+              <div className="p-4 rounded-lg bg-secondary/50">
+                <p className="text-sm text-muted-foreground mb-1">Current Points</p>
+                <p className="text-2xl font-bold text-primary">{selectedUser.total_points}</p>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Points to Add</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={pointsToAdd}
+                  onChange={(e) => setPointsToAdd(e.target.value)}
+                  placeholder="Enter points"
+                  className="text-lg"
+                />
+                <p className="text-xs text-muted-foreground">
+                  New total will be: {selectedUser.total_points + (parseInt(pointsToAdd) || 0)}
+                </p>
+              </div>
+              
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsAddPointsModalOpen(false)}
+                  className="flex-1"
+                  disabled={isAddingPoints}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitAddPoints}
+                  className="flex-1"
+                  disabled={isAddingPoints}
+                >
+                  {isAddingPoints ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Points
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           )}

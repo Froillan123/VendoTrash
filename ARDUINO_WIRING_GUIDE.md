@@ -378,10 +378,35 @@ flowchart TD
 ## Notes
 
 - **Power**: Arduino USB provides 5V, 500mA. For high-torque servos, use external 5V power supply.
+  - **⚠️ IMPORTANT**: If servo doesn't move, USB power might be insufficient!
+  - **Solution**: Use external 5V power supply (1A or higher) connected to Arduino VIN pin
+  - **Alternative**: Use a separate 5V supply for servo (connect GND together!)
 - **Ground**: Always connect all GND pins together (common ground).
 - **Servo Signal**: Pin 10 uses PWM (Pulse Width Modulation) for servo control.
 - **Serial**: USB connection uses 9600 baud rate for communication.
 - **Detection Range**: Ultrasonic sensor detects objects within 50cm (configurable in code).
+
+## Servo Troubleshooting
+
+If servo doesn't move:
+
+1. **Check Power**:
+   - ✅ Red wire connected to 5V
+   - ✅ Black wire connected to GND
+   - ⚠️ USB power (500mA) may be insufficient - try external power supply
+
+2. **Check Signal**:
+   - ✅ Yellow/Orange wire connected to Pin 10
+   - ✅ Wire is not loose
+
+3. **Check Servo**:
+   - Upload code and watch Serial Monitor - you should see servo test sequence on startup
+   - If no movement during test, servo might be broken or underpowered
+
+4. **Power Supply Options**:
+   - **Option 1**: External 5V adapter (1A+) → Connect to Arduino VIN pin
+   - **Option 2**: Separate 5V supply for servo → Connect Red to 5V+, Black to GND (share GND with Arduino!)
+   - **Option 3**: Use Arduino with barrel jack (if available) for more power
 
 ## Next Steps
 

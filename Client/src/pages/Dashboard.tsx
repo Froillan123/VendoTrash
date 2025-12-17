@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
@@ -11,29 +11,162 @@ import {
   Recycle, 
   Coins, 
   TrendingUp, 
+  Zap,
   Play,
-  CheckCircle,
-  Loader,
-  Zap
+  CheckCircle
 } from 'lucide-react';
 import { transactionsAPI, vendoAPI, Transaction } from '@/lib/api';
+import { API_BASE_URL } from '@/lib/apiConfig';
 
-type MachineStatus = 'Idle' | 'Ready' | 'Detecting' | 'Completed';
+
+interface DetectionHistoryItem {
+  material_type: string;
+  confidence: number;
+  points_earned: number;
+  timestamp: string;
+  transaction_id?: string;
+  status?: string;
+}
 
 const Dashboard = () => {
   const { user, updateUserStats, refreshUser, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [machineStatus, setMachineStatus] = useState<MachineStatus>('Idle');
-  const [lastDetection, setLastDetection] = useState<{ type: 'PLASTIC' | 'NON_PLASTIC'; points: number } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [detectionHistory, setDetectionHistory] = useState<DetectionHistoryItem[]>([]);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
+  
+  // WebSocket connection management
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
 
-  // Load transactions on mount - wait for user to be authenticated
+  // Load transactions and detection history on mount - wait for user to be authenticated
   useEffect(() => {
     if (user && isAuthenticated) {
       loadTransactions();
+      loadDetectionHistory();
     }
   }, [user, isAuthenticated]);
+
+  // WebSocket connection for real-time detection updates
+  useEffect(() => {
+    if (!isReady || !user) {
+      // Close WebSocket if session is not active
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const connectWebSocket = () => {
+      // Close existing connection if any
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+
+      // Get WebSocket URL (replace http with ws)
+      const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+      const wsEndpoint = `${wsUrl}/api/vendo/ws/detection-updates/${user.id}`;
+      
+      console.log('🔌 Connecting to WebSocket:', wsEndpoint);
+      const ws = new WebSocket(wsEndpoint);
+      
+      ws.onopen = () => {
+        console.log('✅ WebSocket connected for real-time updates');
+        reconnectAttemptsRef.current = 0; // Reset reconnect attempts
+        
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'detection_update') {
+            // Update detection history immediately (real-time!)
+            const newDetection = message.data;
+            setDetectionHistory(prev => {
+              const newHistory = [newDetection, ...prev];
+              return newHistory.slice(0, 5); // Keep max 5
+            });
+            
+            // Refresh transactions and user stats
+            loadTransactions();
+            refreshUser();
+            
+            // Show toast notification
+            const isRejected = newDetection.material_type === 'REJECTED';
+            toast({
+              title: isRejected ? '❌ Item Rejected' : '✅ Item Detected',
+              description: `${newDetection.material_type} - ${newDetection.points_earned} points`,
+            });
+          } else if (message.type === 'connection') {
+            console.log('📡 WebSocket connection confirmed:', message.message);
+          } else if (message.type === 'pong' || message.type === 'keepalive') {
+            // Keepalive messages, no action needed
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+      };
+      
+      ws.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected', event.code, event.reason);
+        
+        // Only reconnect if session is still active and we haven't exceeded max attempts
+        if (isReady && user && reconnectAttemptsRef.current < maxReconnectAttempts) {
+          reconnectAttemptsRef.current++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000); // Exponential backoff, max 10s
+          
+          console.log(`🔄 Reconnecting WebSocket in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connectWebSocket();
+          }, delay);
+        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+          console.error('❌ Max WebSocket reconnection attempts reached');
+          toast({
+            title: '⚠️ Connection Lost',
+            description: 'Real-time updates unavailable. Please refresh the page.',
+            variant: 'destructive',
+          });
+        }
+      };
+      
+      wsRef.current = ws;
+    };
+
+    // Connect WebSocket
+    connectWebSocket();
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      reconnectAttemptsRef.current = 0;
+    };
+  }, [isReady, user]);
 
   const loadTransactions = async () => {
     if (!user) return;
@@ -48,84 +181,91 @@ const Dashboard = () => {
     }
   };
 
-  const handleInsertTrash = async () => {
-    if (machineStatus !== 'Idle' || !user || isLoading) return;
-
-    setIsLoading(true);
-    setMachineStatus('Ready');
+  const loadDetectionHistory = async () => {
+    if (!user) return;
     
     try {
-      // Step 1: Wait a moment for user to place item
-      setTimeout(async () => {
-        setMachineStatus('Detecting');
-        
-        try {
-          // Step 2: Capture from webcam and classify using Google Vision API
-          const result = await vendoAPI.captureAndClassify(1);
-          
-          if (result.status !== 'success') {
-            throw new Error(result.status || 'Classification failed');
-          }
-          
-          const materialType = result.material_type;
-          const points = result.points_earned;
-          
-          // Step 3: Send command to ESP32/Arduino (if connected)
-          try {
-            await vendoAPI.sendCommand(materialType);
-          } catch (esp32Error) {
-            // ESP32 might not be connected, that's okay for web interface
-            console.warn('ESP32 command failed (may not be connected):', esp32Error);
-          }
-          
-          setLastDetection({ type: materialType, points });
-          setMachineStatus('Completed');
-          
-          // Update local state
-          updateUserStats(materialType === 'PLASTIC' ? 'PLASTIC' : 'METAL');
-          
-          // Reload transactions
-          await loadTransactions();
-          
-          // Refresh user data from server
-          await refreshUser();
-          
-          toast({
-            title: `${materialType === 'PLASTIC' ? 'PLASTIC' : 'NON-PLASTIC'} Detected!`,
-            description: `You earned ${points} point${points > 1 ? 's' : ''} (Confidence: ${(result.confidence * 100).toFixed(1)}%)`,
-          });
-          
-          // Reset after 3 seconds
-          setTimeout(() => {
-            setMachineStatus('Idle');
-            setIsLoading(false);
-          }, 3000);
-        } catch (error: any) {
-          console.error('Error processing trash:', error);
-          toast({
-            title: 'Error',
-            description: error.message || 'Failed to process trash. Make sure webcam is connected.',
-            variant: 'destructive',
-          });
-          setMachineStatus('Idle');
-          setIsLoading(false);
-        }
-      }, 1000);
-    } catch (error: any) {
-      console.error('Error:', error);
-      setMachineStatus('Idle');
-      setIsLoading(false);
+      const response = await vendoAPI.getDetectionHistory();
+      if (response.status === 'success' && response.history) {
+        setDetectionHistory(response.history);
+      }
+    } catch (error) {
+      console.error('Error loading detection history:', error);
     }
   };
 
-  const getStatusColor = () => {
-    switch (machineStatus) {
-      case 'Ready': return 'bg-yellow-500';
-      case 'Detecting': return 'bg-blue-500 animate-pulse';
-      case 'Completed': return 'bg-green-500';
-      default: return 'bg-muted-foreground';
+  const handlePrepareInsert = async () => {
+    if (!user || isPreparing) return;
+
+    setIsPreparing(true);
+    
+    try {
+      const result = await vendoAPI.prepareInsert();
+      
+      if (result.status === 'success') {
+        setIsReady(true);
+        toast({
+          title: "✅ System Ready",
+          description: "Session created. Insert trash into the machine now. Detection will trigger automatically.",
+        });
+        
+        // Immediately refresh to get latest state
+        loadDetectionHistory();
+        loadTransactions();
+        refreshUser();
+        
+        // Reset ready state after 10 minutes (session TTL)
+        setTimeout(() => {
+          setIsReady(false);
+        }, 600000);
+      } else {
+        throw new Error(result.message || 'Failed to prepare insert session');
+      }
+    } catch (error: any) {
+      console.error('Error preparing insert:', error);
+      toast({
+        title: '❌ Error',
+        description: error.message || 'Failed to prepare insert session. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPreparing(false);
     }
   };
+
+  const handleEndSession = async () => {
+    if (!user || isEndingSession) return;
+
+    setIsEndingSession(true);
+    
+    try {
+      const result = await vendoAPI.endSession();
+      
+      if (result.status === 'success' || result.status === 'not_found') {
+        setIsReady(false);
+        // Refresh data after ending session
+        loadDetectionHistory();
+        loadTransactions();
+        refreshUser();
+        toast({
+          title: "✅ Session Ended",
+          description: result.message || "Session ended successfully. Click 'Insert Trash' to start a new session.",
+        });
+      } else {
+        throw new Error(result.message || 'Failed to end session');
+      }
+    } catch (error: any) {
+      console.error('Error ending session:', error);
+      toast({
+        title: '❌ Error',
+        description: error.message || 'Failed to end session. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsEndingSession(false);
+    }
+  };
+
 
   const formatDate = (dateString: string) => {
     try {
@@ -220,55 +360,68 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 sm:space-y-6">
-              {/* Machine Status */}
-              <div className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-secondary/50">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${getStatusColor()}`} />
-                  <span className="text-sm sm:text-base font-medium text-foreground">Machine Status:</span>
+              {/* Detection History Display (Max 5) */}
+              {detectionHistory.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs sm:text-sm font-semibold text-muted-foreground">Latest Detections (Max 5)</p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {detectionHistory.map((detection, index) => {
+                      const isRejected = detection.material_type === 'REJECTED' || detection.status === 'rejected';
+                      return (
+                        <div 
+                          key={index}
+                          className={`p-3 rounded-lg border-2 ${
+                            isRejected
+                              ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
+                              : detection.material_type === 'PLASTIC' 
+                                ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800' 
+                                : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800'
+                          } animate-scale-in`}
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            <div className="flex-1">
+                              <p className={`text-sm sm:text-base font-bold ${
+                                isRejected 
+                                  ? 'text-red-600' 
+                                  : detection.material_type === 'PLASTIC' 
+                                    ? 'text-blue-600' 
+                                    : 'text-amber-600'
+                              }`}>
+                                {isRejected 
+                                  ? '❌ REJECTED' 
+                                  : detection.material_type === 'PLASTIC' 
+                                    ? '✅ PLASTIC' 
+                                    : '✅ CAN/METAL'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {detection.confidence > 0 
+                                  ? `Confidence: ${detection.confidence.toFixed(1)}%`
+                                  : 'No confidence data'}
+                              </p>
+                            </div>
+                            <div className="text-left sm:text-right">
+                              <p className={`text-sm sm:text-base font-bold ${
+                                isRejected ? 'text-red-600' : 'text-primary'
+                              }`}>
+                                {isRejected ? '0 pts' : `+${detection.points_earned} pts`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(detection.timestamp).toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <Badge variant={machineStatus === 'Idle' ? 'secondary' : 'default'} className="text-xs sm:text-sm">
-                  {machineStatus}
-                </Badge>
-              </div>
+              )}
 
-              {/* Insert Button */}
-              <Button
-                onClick={handleInsertTrash}
-                disabled={machineStatus !== 'Idle' || isLoading}
-                variant="eco"
-                size="lg"
-                className="w-full h-12 sm:h-14 text-base sm:text-lg"
-              >
-                {machineStatus === 'Idle' && (
-                  <>
-                    <Play className="h-5 w-5" />
-                    Insert Trash
-                  </>
-                )}
-                {machineStatus === 'Ready' && (
-                  <>
-                    <Loader className="h-5 w-5 animate-spin" />
-                    Preparing...
-                  </>
-                )}
-                {machineStatus === 'Detecting' && (
-                  <>
-                    <Loader className="h-5 w-5 animate-spin" />
-                    Detecting...
-                  </>
-                )}
-                {machineStatus === 'Completed' && (
-                  <>
-                    <CheckCircle className="h-5 w-5" />
-                    Detection Complete!
-                  </>
-                )}
-              </Button>
-
-              {/* Last Detection Result */}
-              {lastDetection && (
+              {/* Fallback: Show latest transaction if no detection history */}
+              {detectionHistory.length === 0 && transactions.length > 0 && (
                 <div className={`p-3 sm:p-4 rounded-lg border-2 ${
-                  lastDetection.type === 'PLASTIC' 
+                  transactions[0].material_type === 'PLASTIC' 
                     ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800' 
                     : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800'
                 } animate-scale-in`}>
@@ -276,18 +429,82 @@ const Dashboard = () => {
                     <div>
                       <p className="text-xs sm:text-sm text-muted-foreground">Latest Detection</p>
                       <p className={`text-base sm:text-lg font-bold ${
-                        lastDetection.type === 'PLASTIC' ? 'text-blue-600' : 'text-amber-600'
+                        transactions[0].material_type === 'PLASTIC' ? 'text-blue-600' : 'text-amber-600'
                       }`}>
-                        {lastDetection.type === 'PLASTIC' ? 'PLASTIC' : 'NON-PLASTIC'}
+                        {transactions[0].material_type === 'PLASTIC' ? '✅ PLASTIC' : '✅ CAN/METAL'}
                       </p>
                     </div>
                     <div className="text-left sm:text-right">
                       <p className="text-xs sm:text-sm text-muted-foreground">Points Earned</p>
-                      <p className="text-base sm:text-lg font-bold text-primary">+{lastDetection.points}</p>
+                      <p className="text-base sm:text-lg font-bold text-primary">
+                        +{transactions[0].points_earned}
+                      </p>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Insert Button */}
+              <div className="space-y-2">
+                <Button
+                  onClick={handlePrepareInsert}
+                  disabled={isPreparing || isReady || !user}
+                  variant="eco"
+                  size="lg"
+                  className="w-full h-12 sm:h-14 text-base sm:text-lg"
+                >
+                  {isPreparing ? (
+                    <>
+                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Preparing...
+                    </>
+                  ) : isReady ? (
+                    <>
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      Ready - Insert Trash Now
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-5 w-5 mr-2" />
+                      Insert Trash
+                    </>
+                  )}
+                </Button>
+
+                {/* End Session Button */}
+                {isReady && (
+                  <Button
+                    onClick={handleEndSession}
+                    disabled={isEndingSession || !user}
+                    variant="outline"
+                    size="lg"
+                    className="w-full h-12 sm:h-14 text-base sm:text-lg"
+                  >
+                    {isEndingSession ? (
+                      <>
+                        <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                        Ending Session...
+                      </>
+                    ) : (
+                      <>
+                        End Session
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              {isReady && (
+                <div className="p-4 rounded-lg bg-green-50 border-2 border-green-200 dark:bg-green-950/20 dark:border-green-800">
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-200 mb-1">
+                    ✅ System Ready
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-300">
+                    Insert trash into the machine now. The system will automatically detect and classify your item.
+                  </p>
+                </div>
+              )}
+
             </CardContent>
           </Card>
 
