@@ -43,7 +43,7 @@ graph TB
     end
     
     subgraph "PC"
-        PC[Computer USB Port]
+        PC_PORT[Computer USB Port]
     end
     
     P7 -->|Digital Output| H2
@@ -53,7 +53,7 @@ graph TB
     V5V -->|Power| S1
     GND -->|Ground| H4
     GND -->|Ground| S3
-    USB -->|Serial Communication| PC
+    USB -->|Serial Communication| PC_PORT
     
     style A fill:#4CAF50,stroke:#333,stroke-width:3px
     style H1 fill:#FF9800,stroke:#333,stroke-width:2px
@@ -63,7 +63,7 @@ graph TB
     style S1 fill:#2196F3,stroke:#333,stroke-width:2px
     style S2 fill:#2196F3,stroke:#333,stroke-width:2px
     style S3 fill:#2196F3,stroke:#333,stroke-width:2px
-    style PC fill:#9C27B0,stroke:#333,stroke-width:2px
+    style PC_PORT fill:#9C27B0,stroke:#333,stroke-width:2px
 ```
 
 ## Connection Flow Diagram

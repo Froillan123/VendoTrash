@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends
 from schemas import VendoCommandRequest, VendoCommandResponse, VendoClassifyRequest, VendoClassifyResponse
 from controllers.vendo_controller import send_command_to_esp32, get_esp32_status, classify_trash_image, capture_and_classify_trash
-from dependencies import get_current_user
+from dependencies import get_current_user, get_current_user_optional
 from models import User
+from typing import Optional
 import logging
 
 router = APIRouter()
@@ -90,29 +91,38 @@ async def classify_trash(
 
 @router.post("/capture-and-classify", response_model=VendoClassifyResponse)
 async def capture_and_classify(
-    request: VendoClassifyRequest
+    request: VendoClassifyRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Capture image from webcam and classify trash
-    No authentication required - used by Arduino bridge script
+    - If authenticated: Uses current user from JWT token
+    - If not authenticated: Uses default user (for Arduino bridge script)
     
     Accepts:
     - image_base64: Optional (if provided, uses it; if not, captures from webcam)
     - machine_id: Machine ID (default: 1)
     """
     try:
+        # Determine user_id: use authenticated user if available, otherwise default
+        user_id = None
+        if current_user:
+            user_id = current_user.id
+            logger.info(f"Using authenticated user ID: {user_id}")
+        
         # If image_base64 is provided, use it; otherwise capture from webcam
         if request.image_base64:
             # Use provided image (for testing)
-            from models import User
-            db = SessionLocal()
-            try:
-                default_user = db.query(User).filter(User.is_active == True).first()
-                if not default_user:
-                    raise HTTPException(status_code=500, detail="No active user found")
-                user_id = default_user.id
-            finally:
-                db.close()
+            if not user_id:
+                from models import User
+                db = SessionLocal()
+                try:
+                    default_user = db.query(User).filter(User.is_active == True).first()
+                    if not default_user:
+                        raise HTTPException(status_code=500, detail="No active user found")
+                    user_id = default_user.id
+                finally:
+                    db.close()
             
             result = await classify_trash_image(
                 image_base64=request.image_base64,
@@ -123,7 +133,7 @@ async def capture_and_classify(
             # Capture from webcam
             result = await capture_and_classify_trash(
                 machine_id=request.machine_id,
-                user_id=None  # Will use default user
+                user_id=user_id  # Use authenticated user or None (will use default)
             )
         
         return VendoClassifyResponse(**result)

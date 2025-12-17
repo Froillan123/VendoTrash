@@ -55,27 +55,28 @@ const Dashboard = () => {
     setMachineStatus('Ready');
     
     try {
-      // Step 1: Send command to ESP32/Arduino
+      // Step 1: Wait a moment for user to place item
       setTimeout(async () => {
         setMachineStatus('Detecting');
         
         try {
-          // For demo, we'll determine material type (in real app, this comes from computer vision)
-          // You can modify this to call computer vision API first
-          const materialType = Math.random() > 0.4 ? 'PLASTIC' : 'NON_PLASTIC';
-          const points = materialType === 'PLASTIC' ? 2 : 1;
+          // Step 2: Capture from webcam and classify using Google Vision API
+          const result = await vendoAPI.captureAndClassify(1);
           
-          // Send command to ESP32
-          await vendoAPI.sendCommand(materialType);
+          if (result.status !== 'success') {
+            throw new Error(result.status || 'Classification failed');
+          }
           
-          // Create transaction in database
-          // Note: user_id comes from JWT token automatically
-          // machine_id should be configurable - using 1 as default
-          const newTransaction = await transactionsAPI.create({
-            machine_id: 1, // Default machine - should be configurable
-            material_type: materialType,
-            points_earned: points,
-          });
+          const materialType = result.material_type;
+          const points = result.points_earned;
+          
+          // Step 3: Send command to ESP32/Arduino (if connected)
+          try {
+            await vendoAPI.sendCommand(materialType);
+          } catch (esp32Error) {
+            // ESP32 might not be connected, that's okay for web interface
+            console.warn('ESP32 command failed (may not be connected):', esp32Error);
+          }
           
           setLastDetection({ type: materialType, points });
           setMachineStatus('Completed');
@@ -91,7 +92,7 @@ const Dashboard = () => {
           
           toast({
             title: `${materialType === 'PLASTIC' ? 'PLASTIC' : 'NON-PLASTIC'} Detected!`,
-            description: `You earned ${points} point${points > 1 ? 's' : ''}`,
+            description: `You earned ${points} point${points > 1 ? 's' : ''} (Confidence: ${(result.confidence * 100).toFixed(1)}%)`,
           });
           
           // Reset after 3 seconds
@@ -103,7 +104,7 @@ const Dashboard = () => {
           console.error('Error processing trash:', error);
           toast({
             title: 'Error',
-            description: error.message || 'Failed to process trash',
+            description: error.message || 'Failed to process trash. Make sure webcam is connected.',
             variant: 'destructive',
           });
           setMachineStatus('Idle');
