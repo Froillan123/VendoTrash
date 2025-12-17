@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vendotrash-db
+    environment:
+      POSTGRES_USER: vendouser
+      POSTGRES_PASSWORD: vendopass
+      POSTGRES_DB: vendotrash
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vendouser"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vendotrash-network
+
+  server:
+    build:
+      context: ./Server
+      dockerfile: Dockerfile
+    container_name: vendotrash-server
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://vendouser:vendopass@postgres:5432/vendotrash
+      DEBUG: "True"
+      SECRET_KEY: dev-secret-key-change-in-production
+      ESP32_IP: ${ESP32_IP:-192.168.1.100}
+      ESP32_PORT: ${ESP32_PORT:-80}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./Server:/app
+      - /app/venv  # Exclude venv from volume
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - vendotrash-network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./Client
+      dockerfile: Dockerfile
+    container_name: vendotrash-client
+    ports:
+      - "5175:80"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - server
+    networks:
+      - vendotrash-network
+    restart: unless-stopped
+
+networks:
+  vendotrash-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+

@@ -1,0 +1,207 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Eco Green Theme */
+    --background: 140 20% 98%;
+    --foreground: 150 30% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 150 30% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 30% 15%;
+
+    /* Primary Eco Green */
+    --primary: 150 61% 30%;
+    --primary-foreground: 0 0% 100%;
+    
+    /* Light Green Secondary */
+    --secondary: 140 40% 94%;
+    --secondary-foreground: 150 61% 25%;
+
+    --muted: 140 20% 94%;
+    --muted-foreground: 150 15% 45%;
+
+    /* Accent - Bright Green */
+    --accent: 145 63% 42%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 140 20% 88%;
+    --input: 140 20% 88%;
+    --ring: 150 61% 30%;
+
+    --radius: 0.75rem;
+
+    /* Custom VendoTrash Colors */
+    --eco-green: 150 61% 30%;
+    --eco-green-light: 145 50% 85%;
+    --eco-green-dark: 150 65% 22%;
+    --leaf-green: 120 45% 45%;
+    --nature-white: 140 20% 98%;
+    --soft-gray: 140 10% 92%;
+    
+    /* Gradients */
+    --gradient-eco: linear-gradient(135deg, hsl(150 61% 30%), hsl(145 63% 42%));
+    --gradient-nature: linear-gradient(180deg, hsl(140 40% 94%), hsl(140 20% 98%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(140 20% 98%));
+    
+    /* Shadows */
+    --shadow-soft: 0 4px 20px -4px hsl(150 30% 30% / 0.1);
+    --shadow-card: 0 8px 30px -8px hsl(150 30% 30% / 0.12);
+    --shadow-glow: 0 0 40px hsl(145 63% 42% / 0.2);
+
+    --sidebar-background: 140 20% 98%;
+    --sidebar-foreground: 150 30% 15%;
+    --sidebar-primary: 150 61% 30%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 140 40% 94%;
+    --sidebar-accent-foreground: 150 61% 25%;
+    --sidebar-border: 140 20% 88%;
+    --sidebar-ring: 150 61% 30%;
+  }
+
+  .dark {
+    --background: 150 30% 8%;
+    --foreground: 140 20% 95%;
+
+    --card: 150 25% 12%;
+    --card-foreground: 140 20% 95%;
+
+    --popover: 150 25% 12%;
+    --popover-foreground: 140 20% 95%;
+
+    --primary: 145 63% 42%;
+    --primary-foreground: 150 30% 8%;
+
+    --secondary: 150 20% 18%;
+    --secondary-foreground: 140 20% 90%;
+
+    --muted: 150 20% 18%;
+    --muted-foreground: 140 15% 60%;
+
+    --accent: 145 50% 35%;
+    --accent-foreground: 140 20% 95%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 20% 20%;
+    --input: 150 20% 20%;
+    --ring: 145 63% 42%;
+
+    --eco-green: 145 63% 42%;
+    --eco-green-light: 145 40% 25%;
+    --eco-green-dark: 150 61% 30%;
+
+    --sidebar-background: 150 25% 10%;
+    --sidebar-foreground: 140 20% 95%;
+    --sidebar-primary: 145 63% 42%;
+    --sidebar-primary-foreground: 150 30% 8%;
+    --sidebar-accent: 150 20% 18%;
+    --sidebar-accent-foreground: 140 20% 90%;
+    --sidebar-border: 150 20% 20%;
+    --sidebar-ring: 145 63% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .eco-card {
+    @apply bg-card rounded-xl shadow-soft border border-border/50 p-6 transition-all duration-300;
+  }
+
+  .eco-card:hover {
+    @apply shadow-card;
+  }
+
+  .eco-gradient {
+    background: var(--gradient-eco);
+  }
+
+  .eco-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-md rounded-xl border border-border/30;
+  }
+
+  .stat-card {
+    @apply eco-card flex flex-col gap-2;
+  }
+
+  .page-container {
+    @apply min-h-screen bg-background;
+  }
+
+  .content-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(150 61% 30%), hsl(145 63% 42%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 2s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.4s ease-out;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
